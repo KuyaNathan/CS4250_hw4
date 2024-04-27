@@ -11,7 +11,7 @@ class hw4crawler:
 		self.frontier = [seed]
 		self.visited = set()
 
-	def connectDataBase(self):
+	def connectDatabase(self):
 		DB_NAME = "hw4_crawler"
 		DB_HOST = "localhost"
 		DB_PORT = 27017
@@ -20,6 +20,7 @@ class hw4crawler:
 			client = MongoClient(host = DB_HOST, port = DB_PORT)
 			db = client[DB_NAME]
 			self.pages = db.pages
+			self.professors = db.professors
 			return db
 		except:
 			print("Database not connected successfully")
@@ -67,7 +68,7 @@ class hw4crawler:
 if __name__ == "__main__":
 	seed = "https://www.cpp.edu/sci/computer-science/"
 	crawler = hw4crawler(seed)
-	crawler.connectDataBase()
+	crawler.connectDatabase()
 	crawler.crawlerThread()
 	
 			

@@ -1,77 +1,80 @@
 from bs4 import BeautifulSoup
 from urllib.request import urlopen
 from pymongo import *
+import re
 
 
 class hw4parser:
 	def __init__(self):
-		self.db = None
-		self.pages = None
+		pass
 
-	def connectDataBase(self):
+	def connectDatabase(self):
 		DB_NAME = "hw4_crawler"
 		DB_HOST = "localhost"
 		DB_PORT = 27017
 
 		try:
 			client = MongoClient(host = DB_HOST, port = DB_PORT)
-			self.db = client[DB_NAME]
-			self.pages = self.db['pages']
-			print("successful connection")
-			return client[DB_NAME]
-		except Exception:
-			print("error connecting to database")
+			db = client[DB_NAME]
+			self.pages = db.pages
+			self.professors = db.professors
+			return db
+		except:
+			print("Database not connected successfully")
 
-	def retriveHTML(self, url):
-		try:
-			page = self.pages.find_one({'url': url})
-			if page:
-				return page['html']
-		except Exception:
-			print("error retrieving html")
 	
-	def parseInfo(self, html):
-		faculty_info = {}
+	def retrieveHTMLFromDB(self, url):
+		html = self.pages.find_one({"url": url})['html']
+		if html is None:
+			print("unable to get HTML from database")
+			exit()
+		return html
+	
+
+	def parseFacultyPageInfo(self, html):
+		prof_list = []
+
 		bs = BeautifulSoup(html, 'html.parser')
-		faculty = bs.find('ul', class_='directory')
-		for professor in faculty.find_all('li'):
-			name = professor.find('h3').text.strip()
-			title = professor.find('p', class_='title').text.strip()
-			office = professor.find('p', class_='office').text.strip()
-			phone = professor.find('p', class_='phone').text.strip()
-			email = professor.find('p', class_='email').text.strip()
-			website = professor.find('a', href=True)['href']
 
-			faculty_info[name] = {
-				'title': title,
-				'office': office,
-				'phone': phone,
-				'email': email,
-				'website': website
+		for professor in bs.find_all("div", {"class": "clearfix"}):
+			if professor.img:
+				name = professor.find("h2").text.strip()
+				title = professor.find("strong", string=re.compile("Title")).next_sibling.strip()
+				office = professor.find("strong", string=re.compile("Office")).next_sibling.strip()
+				phone = professor.find("strong", string=re.compile("Phone")).next_sibling.strip()
+				email = professor.find("a", string=re.compile("@cpp.edu")).text.strip()
+				website = professor.find("a", string=re.compile("cpp.edu/")).text.strip()
+
+				prof_info = {
+					'name': name,
+					'title': title.replace(":", ""),
+					'office': office.replace(":", ""),
+					'phone': phone.replace(":", ""),
+					'email': email,
+					'website': website
+				}
+				prof_list.append(prof_info)
+		
+		for prof in prof_list:
+			professor = {
+				'name': prof['name'],
+				'title': prof['title'],
+				'office': prof['office'],
+				'phone': prof['phone'],
+				'email': prof['email'],
+				'website': prof['website']
 			}
-		return faculty_info
-	
-	def persistInfo(self, faculty_info):
-		professors = self.db['professors']
-		for name, info in faculty_info.items():
-			professor_info = {
-				'name': name,
-				'title': info['title'],
-				'office': info['office'],
-				'phone': info['phone'],
-				'email': info['email'],
-				'website': info['website']
-			}
-			professors.insert_one(professor_info)
-		print("done persisting faculty info")
+			self.professors.insert_one(professor)
+
+		print("done")
+
+
 	
 
 if __name__ == "__main__":
-	parser = hw4parser()
-	parser.connectDataBase()
 	url = "https://www.cpp.edu/sci/computer-science/faculty-and-staff/permanent-faculty.shtml"
-	html = parser.retriveHTML(url)
-	if html:
-		faculty_info = parser.parseInfo(html)
-		parser.persistInfo(faculty_info)
+	parser = hw4parser()
+	parser.connectDatabase()
+	html = parser.retrieveHTMLFromDB(url)
+	parser.parseFacultyPageInfo(html)
 
